@@ -11,12 +11,12 @@ const CalculateBasinSizeRecursiveContext = struct {
     visited_cells: DynamicBitSet,
 };
 
-fn calculateBasinSizeRecursive(context: *CalculateBasinSizeRecursiveContext, x: i32, y: i32) usize {
-    if (x < 0 or x >= context.grid_width or y < 0 or y >= context.grid_height) {
+fn calculateBasinSizeRecursive(context: *CalculateBasinSizeRecursiveContext, x: usize, y: usize) usize {
+    if (x >= context.grid_width or y >= context.grid_height) {
         return 0;
     }
 
-    const index: usize = @intCast(u32, y) * context.grid_width + @intCast(u32, x);
+    const index: usize = y * context.grid_width + x;
     if (context.visited_cells.isSet(index)) {
         return 0;
     }
@@ -28,10 +28,10 @@ fn calculateBasinSizeRecursive(context: *CalculateBasinSizeRecursiveContext, x: 
     }
 
     return 1 +
-        calculateBasinSizeRecursive(context, x, y - 1) +
+        calculateBasinSizeRecursive(context, x, y -% 1) +
         calculateBasinSizeRecursive(context, x + 1, y) +
         calculateBasinSizeRecursive(context, x, y + 1) +
-        calculateBasinSizeRecursive(context, x - 1, y);
+        calculateBasinSizeRecursive(context, x -% 1, y);
 }
 
 pub fn main() !void {
@@ -85,23 +85,15 @@ pub fn main() !void {
         const x = index % grid_width;
         const y = index / grid_width;
 
-        if (x > 0 and height >= heightmap.items[y * grid_width + (x - 1)]) {
+        if ((x > 0 and height >= heightmap.items[y * grid_width + (x - 1)]) or
+            (x + 1 < grid_width and height >= heightmap.items[y * grid_width + (x + 1)]) or
+            (y > 0 and height >= heightmap.items[(y - 1) * grid_width + x]) or
+            (y + 1 < grid_height and height >= heightmap.items[(y + 1) * grid_width + x]))
+        {
             continue;
         }
 
-        if (x + 1 < grid_width and height >= heightmap.items[y * grid_width + (x + 1)]) {
-            continue;
-        }
-
-        if (y > 0 and height >= heightmap.items[(y - 1) * grid_width + x]) {
-            continue;
-        }
-
-        if (y + 1 < grid_height and height >= heightmap.items[(y + 1) * grid_width + x]) {
-            continue;
-        }
-
-        const basin_size: usize = calculateBasinSizeRecursive(&calculate_basin_size_context, @intCast(i32, x), @intCast(i32, y));
+        const basin_size: usize = calculateBasinSizeRecursive(&calculate_basin_size_context, x, y);
         try basins.append(basin_size);
 
         log.debug("Basin: {d} Size: {d}", .{ basins.items.len, basin_size });
