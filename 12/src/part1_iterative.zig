@@ -11,8 +11,10 @@ const CaveSize = enum {
 const Cave = struct {
     id: []const u8,
     size: CaveSize,
-    links: std.ArrayList([]const u8),
+    links: std.ArrayList(*Cave),
     allocator: std.mem.Allocator,
+
+    can_visit: bool = true,
 
     /// Clean up with `destroy`
     fn create(allocator: std.mem.Allocator, cave_id: []const u8) !*Cave {
@@ -32,7 +34,7 @@ const Cave = struct {
         return Cave{
             .id = cave_id,
             .size = if (std.ascii.isLower(cave_id[0])) .small else .big,
-            .links = std.ArrayList([]const u8).init(allocator),
+            .links = std.ArrayList(*Cave).init(allocator),
             .allocator = allocator,
         };
     }
@@ -45,8 +47,8 @@ const Cave = struct {
         _ = options;
         _ = fmt;
         try writer.print("{s}{{ id = {s} size = {any} links = [", .{ @typeName(Cave), self.id, self.size });
-        for (self.links.items, 0..) |linked_cave_id, index| {
-            try writer.print("{s}", .{linked_cave_id});
+        for (self.links.items, 0..) |linked_cave, index| {
+            try writer.print("{s}", .{linked_cave.id});
             if (index < self.links.items.len - 1) {
                 try writer.writeAll(", ");
             }
@@ -65,36 +67,10 @@ fn findCave(cave_array: []*Cave, cave_id: []const u8) ?*Cave {
     }
 }
 
-fn findString(haystack: [][]const u8, needle: []const u8) ?usize {
-    for (haystack, 0..) |item, index| {
-        if (std.mem.eql(u8, needle, item)) {
-            return index;
-        }
-    } else {
-        return null;
-    }
-}
-
-fn travelRecursive(visiting_cave: *Cave, caves: []*Cave, visited_set: *std.ArrayList([]const u8), num_paths: *usize) !void {
-    if (!std.mem.eql(u8, visiting_cave.id, "end")) {
-        if (visiting_cave.size == CaveSize.small) {
-            try visited_set.append(visiting_cave.id);
-        }
-
-        for (visiting_cave.links.items) |linked_cave_id| {
-            if (findString(visited_set.items, linked_cave_id)) |_| {} else {
-                const cave_to_visit: *Cave = findCave(caves, linked_cave_id).?;
-                try travelRecursive(cave_to_visit, caves, visited_set, num_paths);
-            }
-        }
-
-        if (visiting_cave.size == CaveSize.small) {
-            _ = visited_set.pop();
-        }
-    } else {
-        num_paths.* += 1;
-    }
-}
+const TraversalNode = struct {
+    cave: *Cave,
+    next_link_index: usize = 0,
+};
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -132,22 +108,49 @@ pub fn main() !void {
         log.debug("{any}", .{cave_a});
         log.debug("{any}", .{cave_b});
 
-        _ = findString(cave_a.links.items, cave_b.id) orelse {
-            try cave_a.links.append(cave_b.id);
+        _ = findCave(cave_a.links.items, cave_b.id) orelse {
+            try cave_a.links.append(cave_b);
         };
 
-        _ = findString(cave_b.links.items, cave_a.id) orelse {
-            try cave_b.links.append(cave_a.id);
+        _ = findCave(cave_b.links.items, cave_a.id) orelse {
+            try cave_b.links.append(cave_a);
         };
     }
     defer for (caves.items) |cave| cave.destroy();
 
-    var path_count: usize = 0;
-    const start_cave = findCave(caves.items, "start").?;
-    var visited_set = std.ArrayList([]const u8).init(allocator);
-    defer visited_set.deinit();
+    var traversal_stack = std.ArrayList(TraversalNode).init(allocator);
+    defer traversal_stack.deinit();
 
-    try travelRecursive(start_cave, caves.items, &visited_set, &path_count);
+    const start_cave = findCave(caves.items, "start").?;
+    try traversal_stack.append(TraversalNode{ .cave = start_cave });
+
+    var path_count: usize = 0;
+
+    while (traversal_stack.items.len > 0) {
+        var node: *TraversalNode = &traversal_stack.items[traversal_stack.items.len - 1];
+
+        if (std.mem.eql(u8, node.cave.id, "end")) {
+            path_count += 1;
+            _ = traversal_stack.pop();
+            continue;
+        }
+
+        if (node.cave.size == CaveSize.small) {
+            node.cave.can_visit = false;
+        }
+
+        if (node.next_link_index == node.cave.links.items.len) {
+            _ = traversal_stack.pop();
+            node.cave.can_visit = true;
+        } else {
+            const linked_cave: *Cave = node.cave.links.items[node.next_link_index];
+            node.next_link_index += 1;
+
+            if (linked_cave.can_visit) {
+                try traversal_stack.append(TraversalNode{ .cave = linked_cave });
+            }
+        }
+    }
 
     log.info("Number of paths: {d}", .{path_count});
 }
