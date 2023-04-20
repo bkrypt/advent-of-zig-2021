@@ -118,13 +118,13 @@ pub fn main() !void {
     }
     defer for (caves.items) |cave| cave.destroy();
 
+    var path_count: usize = 0;
+
     var traversal_stack = std.ArrayList(TraversalNode).init(allocator);
     defer traversal_stack.deinit();
 
     const start_cave = findCave(caves.items, "start").?;
     try traversal_stack.append(TraversalNode{ .cave = start_cave });
-
-    var path_count: usize = 0;
 
     while (traversal_stack.items.len > 0) {
         var node: *TraversalNode = &traversal_stack.items[traversal_stack.items.len - 1];

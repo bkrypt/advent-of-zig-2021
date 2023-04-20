@@ -143,10 +143,11 @@ pub fn main() !void {
     defer for (caves.items) |cave| cave.destroy();
 
     var path_count: usize = 0;
-    const start_cave = findCave(caves.items, "start").?;
+
     var visited_set = std.ArrayList([]const u8).init(allocator);
     defer visited_set.deinit();
 
+    const start_cave = findCave(caves.items, "start").?;
     try travelRecursive(start_cave, caves.items, &visited_set, &path_count);
 
     log.info("Number of paths: {d}", .{path_count});
